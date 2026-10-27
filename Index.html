@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema DIF Tulancingo - Punto de Venta e Inventario</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            dif: {
+              wine: '#691c32',      // Color vino institucional
+              darkwine: '#4a1122',
+              gold: '#bc955c',      // Acento dorado
+              lightgold: '#e7d6be',
+              gray: '#f4f6f8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #ticket-imprimir, #ticket-imprimir * { visibility: visible; }
+      #ticket-imprimir { position: absolute; left: 0; top: 0; width: 80mm; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans min-h-screen flex flex-col">
+
+  <!-- ENCABEZADO INSTITUCIONAL -->
+  <header class="bg-dif-wine text-white shadow-md">
+    <div class="container mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="bg-white text-dif-wine w-11 h-11 rounded-full flex items-center justify-center font-bold text-xl shadow">
+          <i class="fa-solid fa-heart-pulse"></i>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-xl font-bold tracking-tight">SISTEMA MUNICIPAL DIF TULANCINGO</h1>
+          <p class="text-xs text-dif-lightgold font-medium">Tulancingo de Bravo, Hgo. • Control de Punto de Venta e Inventario</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-4 mt-2 sm:mt-0 text-sm">
+        <span class="bg-dif-darkwine px-3 py-1 rounded-full text-xs text-dif-lightgold border border-dif-gold/30">
+          <i class="fa-solid fa-user-circle mr-1"></i> Operador DIF: Turno Activo
+        </span>
+        <span id="reloj-fecha" class="text-xs text-gray-200"></span>
+      </div>
+    </div>
+
+    <!-- MENÚ DE NAVEGACIÓN -->
+    <nav class="bg-dif-darkwine px-4 border-t border-dif-gold/20">
+      <div class="container mx-auto flex space-x-1 sm:space-x-4">
+        <button onclick="cambiarTab('pos')" id="tab-btn-pos" class="tab-btn px-4 py-2.5 text-sm font-semibold border-b-4 border-dif-gold text-white flex items-center gap-2">
+          <i class="fa-solid fa-cash-register"></i> Punto de Venta (Caja)
+        </button>
+        <button onclick="cambiarTab('inventario')" id="tab-btn-inventario" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-4 border-transparent text-gray-300 hover:text-white flex items-center gap-2">
+          <i class="fa-solid fa-boxes-stacked"></i> Inventario (ABC)
+        </button>
+        <button onclick="cambiarTab('reportes')" id="tab-btn-reportes" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-4 border-transparent text-gray-300 hover:text-white flex items-center gap-2">
+          <i class="fa-solid fa-chart-line"></i> Reportes
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="container mx-auto p-4 flex-1">
+
+    <!-- ============================================== -->
+    <!-- SECCIÓN 1: PUNTO DE VENTA (CAJA) -->
+    <!-- ============================================== -->
+    <section id="modulo-pos" class="tab-contenido grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <!-- Catálogo de productos para cobrar -->
+      <div class="lg:col-span-7 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4">
+          <div class="relative w-full">
+            <input type="text" id="pos-buscar" onkeyup="filtrarCatalogoPOS()" placeholder="Buscar producto por código o nombre..." 
+                   class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-dif-wine">
+            <i class="fa-solid fa-search absolute left-3 top-3 text-gray-400"></i>
+          </div>
+          <span class="text-xs text-gray-500 whitespace-nowrap" id="pos-stock-count">0 productos</span>
+        </div>
+
+        <div id="pos-grid-productos" class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[620px] overflow-y-auto pr-1">
+          <!-- Renderizado dinámico de tarjetas de productos -->
+        </div>
+      </div>
+
+      <!-- Carrito de Venta y Cobro -->
+      <div class="lg:col-span-5 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-center pb-3 border-b border-gray-200 mb-3">
+            <h2 class="text-base font-bold text-dif-wine flex items-center gap-2">
+              <i class="fa-solid fa-cart-shopping"></i> Venta Actual
+            </h2>
+            <button onclick="vaciarCarrito()" class="text-xs text-red-600 hover:underline">
+              <i class="fa-solid fa-trash-can mr-1"></i> Cancelar venta
+            </button>
+          </div>
+
+          <div class="overflow-x-auto max-h-[350px] overflow-y-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-50 text-gray-600 uppercase border-b">
+                <tr>
+                  <th class="p-2">Producto</th>
+                  <th class="p-2 text-center">Cant.</th>
+                  <th class="p-2 text-right">P. Unit</th>
+                  <th class="p-2 text-right">Total</th>
+                  <th class="p-2 text-center"></th>
+                </tr>
+              </thead>
+              <tbody id="carrito-body" class="divide-y divide-gray-100">
+                <!-- Se llena por JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Totales y Métodos de Cobro -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-4 space-y-2">
+          <div class="flex justify-between text-sm text-gray-600">
+            <span>Artículos:</span>
+            <span id="carrito-total-articulos" class="font-bold">0</span>
+          </div>
+          <div class="flex justify-between text-lg font-bold text-dif-wine border-t pt-2">
+            <span>Total a Cobrar:</span>
+            <span id="carrito-total-precio">$0.00 MXN</span>
+          </div>
+
+          <div class="pt-2">
+            <label class="text-xs font-semibold text-gray-600 block mb-1">Monto recibido (Efectivo):</label>
+            <input type="number" id="pago-monto" min="0" step="0.5" oninput="calcularCambio()" placeholder="0.00" 
+                   class="w-full p-2 border rounded font-bold text-right text-lg border-gray-300 focus:ring-2 focus:ring-dif-wine">
+          </div>
+
+          <div class="flex justify-between text-sm font-semibold text-gray-700">
+            <span>Cambio:</span>
+            <span id="cambio-texto" class="text-green-700 font-bold">$0.00</span>
+          </div>
+
+          <button onclick="procesarCobro()" class="w-full py-3 bg-dif-wine hover:bg-dif-darkwine text-white font-bold rounded-lg shadow mt-3 flex items-center justify-center gap-2 transition duration-150">
+            <i class="fa-solid fa-receipt"></i> Completar Venta y Generar Ticket
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- SECCIÓN 2: INVENTARIO (ALTAS, BAJAS, CAMBIOS) -->
+    <!-- ============================================== -->
+    <section id="modulo-inventario" class="tab-contenido hidden space-y-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h2 class="text-lg font-bold text-dif-wine">Catálogo de Existencias (Almacén / Farmacia / Bazar DIF)</h2>
+          <p class="text-xs text-gray-500">Módulo de Altas, Bajas y Cambios de Mercancía e Insumos</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="abrirModalProducto()" class="bg-dif-wine hover:bg-dif-darkwine text-white text-sm px-4 py-2 rounded-lg font-semibold flex items-center gap-2 shadow">
+            <i class="fa-solid fa-plus-circle"></i> Dar de Alta Nuevo Producto
+          </button>
+          <button onclick="exportarInventarioCSV()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm px-3 py-2 rounded-lg border flex items-center gap-1 font-medium">
+            <i class="fa-solid fa-file-csv"></i> Descargar CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Buscador y Filtros -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <div class="flex flex-col sm:flex-row gap-3 mb-4">
+          <div class="relative flex-1">
+            <input type="text" id="inventario-buscar" onkeyup="renderizarTablaInventario()" placeholder="Filtrar por código, nombre o categoría..." 
+                   class="w-full pl-10 pr-4 py-2 border rounded-lg text-sm border-gray-300 focus:outline-none focus:ring-2 focus:ring-dif-wine">
+            <i class="fa-solid fa-search absolute left-3 top-2.5 text-gray-400"></i>
+          </div>
+          <select id="filtro-categoria" onchange="renderizarTablaInventario()" class="border p-2 rounded-lg text-sm text-gray-600 bg-white">
+            <option value="">Todas las categorías</option>
+            <option value="Medicamento / Farmacia">Medicamento / Farmacia</option>
+            <option value="Cuotas de Recuperación">Cuotas de Recuperación</option>
+            <option value="Bazar DIF">Bazar DIF</option>
+            <option value="Despensas / Apoyos">Despensas / Apoyos</option>
+          </select>
+        </div>
+
+        <!-- Tabla de Inventario -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-dif-wine text-white text-xs uppercase font-semibold">
+              <tr>
+                <th class="p-3">Código</th>
+                <th class="p-3">Nombre del Producto</th>
+                <th class="p-3">Categoría</th>
+                <th class="p-3 text-right">Precio Recuperación</th>
+                <th class="p-3 text-center">Stock Actual</th>
+                <th class="p-3 text-center">Estado</th>
+                <th class="p-3 text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="inventario-body" class="divide-y divide-gray-200 text-gray-700">
+              <!-- Llenado dinámico -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- SECCIÓN 3: REPORTES -->
+    <!-- ============================================== -->
+    <section id="modulo-reportes" class="tab-contenido hidden space-y-5">
+      <!-- Tarjetas de Estadísticas -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-dif-wine flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500 uppercase font-semibold">Ventas Totales Registradas</p>
+            <h3 id="rep-total-ingresos" class="text-2xl font-bold text-gray-800 mt-1">$0.00</h3>
+          </div>
+          <div class="text-dif-wine bg-red-50 p-3 rounded-full text-xl"><i class="fa-solid fa-sack-dollar"></i></div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-dif-gold flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500 uppercase font-semibold">Tickets Emitidos</p>
+            <h3 id="rep-total-tickets" class="text-2xl font-bold text-gray-800 mt-1">0</h3>
+          </div>
+          <div class="text-dif-gold bg-amber-50 p-3 rounded-full text-xl"><i class="fa-solid fa-receipt"></i></div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-600 flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500 uppercase font-semibold">Productos en Catálogo</p>
+            <h3 id="rep-total-productos" class="text-2xl font-bold text-gray-800 mt-1">0</h3>
+          </div>
+          <div class="text-blue-600 bg-blue-50 p-3 rounded-full text-xl"><i class="fa-solid fa-boxes"></i></div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500 flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500 uppercase font-semibold">Productos con Stock Crítico</p>
+            <h3 id="rep-stock-critico" class="text-2xl font-bold text-red-600 mt-1">0</h3>
+          </div>
+          <div class="text-red-500 bg-red-50 p-3 rounded-full text-xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        </div>
+      </div>
+
+      <!-- Tabla de Ventas Recientes -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <h3 class="text-md font-bold text-dif-wine mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-clock-rotate-left"></i> Historial de Tickets y Ventas Realizadas
+        </h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-100 text-gray-600 text-xs uppercase font-semibold">
+              <tr>
+                <th class="p-3">Folio Ticket</th>
+                <th class="p-3">Fecha y Hora</th>
+                <th class="p-3">Artículos</th>
+                <th class="p-3 text-right">Total Cobrado</th>
+                <th class="p-3 text-center">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="reporte-ventas-body" class="divide-y divide-gray-200">
+              <!-- Llenado dinámico -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================== -->
+  <!-- MODAL: ALTA Y CAMBIO DE PRODUCTO -->
+  <!-- ============================================== -->
+  <div id="modal-producto" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-fade">
+      <div class="bg-dif-wine text-white px-5 py-3 flex justify-between items-center">
+        <h3 id="modal-producto-titulo" class="font-bold text-base">Alta de Producto</h3>
+        <button onclick="cerrarModalProducto()" class="text-white hover:text-gray-300 text-lg">&times;</button>
+      </div>
+
+      <form id="form-producto" onsubmit="guardarProducto(event)" class="p-5 space-y-3">
+        <input type="hidden" id="prod-id">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Código de Barras / Clave Interna:</label>
+          <input type="text" id="prod-codigo" required class="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-dif-wine">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Nombre o Descripción del Producto:</label>
+          <input type="text" id="prod-nombre" required class="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-dif-wine">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Categoría:</label>
+            <select id="prod-categoria" class="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-dif-wine bg-white">
+              <option value="Medicamento / Farmacia">Medicamento / Farmacia</option>
+              <option value="Cuotas de Recuperación">Cuotas de Recuperación</option>
+              <option value="Bazar DIF">Bazar DIF</option>
+              <option value="Despensas / Apoyos">Despensas / Apoyos</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Precio de Recuperación ($):</label>
+            <input type="number" id="prod-precio" step="0.5" min="0" required class="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-dif-wine">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Stock Inicial / Existencia:</label>
+            <input type="number" id="prod-stock" min="0" required class="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-dif-wine">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Stock Mínimo de Alerta:</label>
+            <input type="number" id="prod-stock-min" min="1" value="5" class="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-dif-wine">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t">
+          <button type="button" onclick="cerrarModalProducto()" class="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100">Cancelar</button>
+          <button type="submit" class="px-4 py-2 bg-dif-wine text-white rounded-lg text-sm font-semibold hover:bg-dif-darkwine">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: TICKET DE VENTA (IMPRIMIBLE) -->
+  <!-- ============================================== -->
+  <div id="modal-ticket" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full p-5 text-gray-800">
+      
+      <!-- Contenedor Imprimible -->
+      <div id="ticket-imprimir" class="font-mono text-xs border p-3 bg-white">
+        <div class="text-center pb-2 border-b border-dashed border-gray-400">
+          <p class="font-bold text-sm">SISTEMA MUNICIPAL DIF</p>
+          <p class="font-bold">TULANCINGO DE BRAVO</p>
+          <p class="text-[10px] text-gray-600">RFC: SMD-850101-XXX</p>
+          <p class="text-[10px] text-gray-600">Tulancingo de Bravo, Hidalgo</p>
+          <p class="mt-1 font-semibold" id="ticket-folio">FOLIO: #0000</p>
+          <p class="text-[10px]" id="ticket-fecha"></p>
+        </div>
+
+        <table class="w-full my-2 text-left">
+          <thead>
+            <tr class="border-b border-dashed">
+              <th class="py-1">Cant. Art</th>
+              <th class="py-1 text-right">P.U</th>
+              <th class="py-1 text-right">Imp.</th>
+            </tr>
+          </thead>
+          <tbody id="ticket-items"></tbody>
+        </table>
+
+        <div class="border-t border-dashed pt-2 space-y-1 text-right">
+          <p class="font-bold text-sm">TOTAL: <span id="ticket-total">$0.00</span></p>
+          <p>Efectivo Recibido: <span id="ticket-recibido">$0.00</span></p>
+          <p>Cambio: <span id="ticket-cambio">$0.00</span></p>
+        </div>
+
+        <div class="text-center mt-3 pt-2 border-t border-dashed text-[10px] text-gray-500">
+          <p>¡Gracias por su cuota de recuperación!</p>
+          <p>Trabajando de corazón por Tulancingo.</p>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button onclick="window.print()" class="flex-1 bg-dif-wine hover:bg-dif-darkwine text-white py-2 rounded text-sm font-semibold flex items-center justify-center gap-1">
+          <i class="fa-solid fa-print"></i> Imprimir
+        </button>
+        <button onclick="cerrarTicket()" class="px-4 py-2 border rounded text-sm text-gray-600 hover:bg-gray-100">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIE DE PÁGINA -->
+  <footer class="bg-gray-200 border-t py-2 text-center text-xs text-gray-500">
+    Gobierno Municipal de Tulancingo de Bravo &copy; Sistema DIF Tulancingo • Módulo de Gestión Local
+  </footer>
+
+  <!-- ============================================== -->
+  <!-- LÓGICA DE PROGRAMACIÓN (JAVASCRIPT) -->
+  <!-- ============================================== -->
+  <script>
+    // --- DATOS INICIALES POR DEFECTO (Si no existen en LocalStorage) ---
+    const PRODUCTOS_INICIALES = [
+      { id: 1, codigo: 'MED001', nombre: 'Paracetamol 500mg (Caja 20 tab)', categoria: 'Medicamento / Farmacia', precio: 15.00, stock: 45, stockMin: 10 },
+      { id: 2, codigo: 'MED002', nombre: 'Amoxicilina 500mg', categoria: 'Medicamento / Farmacia', precio: 35.00, stock: 8, stockMin: 10 },
+      { id: 3, codigo: 'CUO001', nombre: 'Consulta Médica General', categoria: 'Cuotas de Recuperación', precio: 30.00, stock: 999, stockMin: 5 },
+      { id: 4, codigo: 'CUO002', nombre: 'Terapia Psicológica / Dental', categoria: 'Cuotas de Recuperación', precio: 50.00, stock: 999, stockMin: 5 },
+      { id: 5, codigo: 'BAZ001', nombre: 'Prenda Infantil Donación', categoria: 'Bazar DIF', precio: 20.00, stock: 12, stockMin: 5 },
+      { id: 6, codigo: 'DES001', nombre: 'Canasta Básica Asistencial', categoria: 'Despensas / Apoyos', precio: 80.00, stock: 4, stockMin: 10 }
+    ];
+
+    // Estados de memoria
+    let inventario = JSON.parse(localStorage.getItem('dif_inventario')) || PRODUCTOS_INICIALES;
+    let ventas = JSON.parse(localStorage.getItem('dif_ventas')) || [];
+    let carrito = [];
+
+    // --- RELOJ Y FECHA ACTUAL ---
+    function actualizarFecha() {
+      const ahora = new Date();
+      document.getElementById('reloj-fecha').textContent = ahora.toLocaleString('es-MX', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    }
+    setInterval(actualizarFecha, 1000);
+    actualizarFecha();
+
+    // Guardar en Storage
+    function persistirInventario() {
+      localStorage.setItem('dif_inventario', JSON.stringify(inventario));
+    }
+    function persistirVentas() {
+      localStorage.setItem('dif_ventas', JSON.stringify(ventas));
+    }
+
+    // --- GESTIÓN DE PESTAÑAS (TABS) ---
+    function cambiarTab(tab) {
+      document.querySelectorAll('.tab-contenido').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('border-dif-gold', 'text-white');
+        btn.classList.add('border-transparent', 'text-gray-300');
+      });
+
+      document.getElementById(`modulo-${tab}`).classList.remove('hidden');
+      const activo = document.getElementById(`tab-btn-${tab}`);
+      activo.classList.add('border-dif-gold', 'text-white');
+      activo.classList.remove('border-transparent', 'text-gray-300');
+
+      if (tab === 'pos') renderizarCatalogoPOS();
+      if (tab === 'inventario') renderizarTablaInventario();
+      if (tab === 'reportes') renderizarReportes();
+    }
+
+    // ==========================================
+    // SECCIÓN POS: CATÁLOGO Y CARRITO
+    // ==========================================
+    function renderizarCatalogoPOS(filtro = '') {
+      const grid = document.getElementById('pos-grid-productos');
+      grid.innerHTML = '';
+
+      const filtrados = inventario.filter(p => 
+        p.nombre.toLowerCase().includes(filtro.toLowerCase()) || 
+        p.codigo.toLowerCase().includes(filtro.toLowerCase())
+      );
+
+      document.getElementById('pos-stock-count').innerText = `${filtrados.length} productos disponibles`;
+
+      filtrados.forEach(p => {
+        const sinStock = p.stock <= 0;
+        const tarjeta = document.createElement('div');
+        tarjeta.className = `p-3 rounded-lg border flex flex-col justify-between transition-shadow bg-white ${
+          sinStock ? 'opacity-50 border-gray-300' : 'hover:shadow-md border-gray-200 cursor-pointer'
+        }`;
+        
+        tarjeta.innerHTML = `
+          <div>
+            <div class="flex justify-between items-start text-xs text-gray-500 mb-1">
+              <span class="font-mono">${p.codigo}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] ${p.stock <= p.stockMin ? 'bg-red-100 text-red-700 font-bold' : 'bg-gray-100'}">
+                Stock: ${p.stock}
+              </span>
+            </div>
+            <h4 class="font-bold text-xs text-gray-800 line-clamp-2">${p.nombre}</h4>
+            <span class="text-[10px] text-dif-wine font-medium">${p.categoria}</span>
+          </div>
+          <div class="flex justify-between items-center mt-3 pt-2 border-t">
+            <span class="text-sm font-bold text-dif-wine">$${p.precio.toFixed(2)}</span>
+            <button onclick="agregarAlCarrito(${p.id})" ${sinStock ? 'disabled' : ''} 
+                    class="bg-dif-wine text-white px-2.5 py-1 rounded text-xs hover:bg-dif-darkwine disabled:bg-gray-400">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+        `;
+        grid.appendChild(tarjeta);
+      });
+    }
+
+    function filtrarCatalogoPOS() {
+      const txt = document.getElementById('pos-buscar').value;
+      renderizarCatalogoPOS(txt);
+    }
+
+    function agregarAlCarrito(idProducto) {
+      const producto = inventario.find(p => p.id === idProducto);
+      if (!producto || producto.stock <= 0) return;
+
+      const itemExistente = carrito.find(item => item.id === idProducto);
+
+      if (itemExistente) {
+        if (itemExistente.cantidad + 1 > producto.stock) {
+          alert('No hay suficiente existencia en inventario para este producto.');
+          return;
+        }
+        itemExistente.cantidad++;
+      } else {
+        carrito.push({
+          id: producto.id,
+          codigo: producto.codigo,
+          nombre: producto.nombre,
+          precio: producto.precio,
+          cantidad: 1
+        });
+      }
+      actualizarVistaCarrito();
+    }
+
+    function modificarCantidadCarrito(idProducto, delta) {
+      const item = carrito.find(i => i.id === idProducto);
+      const prod = inventario.find(p => p.id === idProducto);
+      if (!item) return;
+
+      const nuevaCant = item.cantidad + delta;
+      if (nuevaCant <= 0) {
+        eliminarDelCarrito(idProducto);
+      } else {
+        if (nuevaCant > prod.stock) {
+          alert('Límite de stock alcanzado.');
+          return;
+        }
+        item.cantidad = nuevaCant;
+        actualizarVistaCarrito();
+      }
+    }
+
+    function eliminarDelCarrito(idProducto) {
+      carrito = carrito.filter(i => i.id !== idProducto);
+      actualizarVistaCarrito();
+    }
+
+    function vaciarCarrito() {
+      carrito = [];
+      actualizarVistaCarrito();
+    }
+
+    function actualizarVistaCarrito() {
+      const tbody = document.getElementById('carrito-body');
+      tbody.innerHTML = '';
+
+      let totalArticulos = 0;
+      let totalPagar = 0;
+
+      carrito.forEach(item => {
+        const subtotal = item.cantidad * item.precio;
+        totalArticulos += item.cantidad;
+        totalPagar += subtotal;
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-gray-50";
+        tr.innerHTML = `
+          <td class="p-2">
+            <p class="font-medium text-gray-800 leading-tight">${item.nombre}</p>
+            <span class="text-[10px] text-gray-400 font-mono">${item.codigo}</span>
+          </td>
+          <td class="p-2 text-center whitespace-nowrap">
+            <button onclick="modificarCantidadCarrito(${item.id}, -1)" class="px-1.5 py-0.5 bg-gray-200 rounded text-xs hover:bg-gray-300">-</button>
+            <span class="mx-1 font-semibold">${item.cantidad}</span>
+            <button onclick="modificarCantidadCarrito(${item.id}, 1)" class="px-1.5 py-0.5 bg-gray-200 rounded text-xs hover:bg-gray-300">+</button>
+          </td>
+          <td class="p-2 text-right">$${item.precio.toFixed(2)}</td>
+          <td class="p-2 text-right font-bold">$${subtotal.toFixed(2)}</td>
+          <td class="p-2 text-center">
+            <button onclick="eliminarDelCarrito(${item.id})" class="text-red-500 hover:text-red-700">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('carrito-total-articulos').innerText = totalArticulos;
+      document.getElementById('carrito-total-precio').innerText = `$${totalPagar.toFixed(2)} MXN`;
+      calcularCambio();
+    }
+
+    function calcularCambio() {
+      const totalPagar = carrito.reduce((acc, i) => acc + (i.cantidad * i.precio), 0);
+      const montoRecibido = parseFloat(document.getElementById('pago-monto').value) || 0;
+      const cambio = montoRecibido - totalPagar;
+
+      const spanCambio = document.getElementById('cambio-texto');
+      if (montoRecibido > 0 && cambio >= 0) {
+        spanCambio.innerText = `$${cambio.toFixed(2)} MXN`;
+        spanCambio.className = "text-green-700 font-bold";
+      } else if (montoRecibido > 0 && cambio < 0) {
+        spanCambio.innerText = `Falta: $${Math.abs(cambio).toFixed(2)}`;
+        spanCambio.className = "text-red-600 font-bold";
+      } else {
+        spanCambio.innerText = '$0.00';
+        spanCambio.className = "text-gray-500 font-bold";
+      }
+    }
+
+    function procesarCobro() {
+      if (carrito.length === 0) {
+        alert('El carrito se encuentra vacío.');
+        return;
+      }
+
+      const total = carrito.reduce((acc, i) => acc + (i.cantidad * i.precio), 0);
+      const recibido = parseFloat(document.getElementById('pago-monto').value);
+
+      if (isNaN(recibido) || recibido < total) {
+        alert('Ingrese un monto pagado válido e igual o superior al total.');
+        return;
+      }
+
+      // Descontar inventario (Baja automática por venta)
+      carrito.forEach(cartItem => {
+        const prod = inventario.find(p => p.id === cartItem.id);
+        if (prod) {
+          prod.stock = Math.max(0, prod.stock - cartItem.cantidad);
+        }
+      });
+      persistirInventario();
+
+      // Guardar ticket en Ventas
+      const folio = 'DIF-' + Math.floor(100000 + Math.random() * 900000);
+      const nuevaVenta = {
+        folio: folio,
+        fecha: new Date().toLocaleString('es-MX'),
+        items: [...carrito],
+        total: total,
+        recibido: recibido,
+        cambio: recibido - total
+      };
+
+      ventas.unshift(nuevaVenta);
+      persistirVentas();
+
+      // Mostrar modal de ticket
+      mostrarTicket(nuevaVenta);
+
+      // Limpiar venta actual
+      vaciarCarrito();
+      document.getElementById('pago-monto').value = '';
+      calcularCambio();
+      renderizarCatalogoPOS();
+    }
+
+    function mostrarTicket(venta) {
+      document.getElementById('ticket-folio').innerText = `FOLIO: ${venta.folio}`;
+      document.getElementById('ticket-fecha').innerText = `Fecha: ${venta.fecha}`;
+
+      const tBody = document.getElementById('ticket-items');
+      tBody.innerHTML = '';
+      venta.items.forEach(it => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${it.cantidad}x ${it.nombre.substring(0, 18)}</td>
+          <td class="text-right">$${it.precio.toFixed(2)}</td>
+          <td class="text-right">$${(it.cantidad * it.precio).toFixed(2)}</td>
+        `;
+        tBody.appendChild(tr);
+      });
+
+      document.getElementById('ticket-total').innerText = `$${venta.total.toFixed(2)}`;
+      document.getElementById('ticket-recibido').innerText = `$${venta.recibido.toFixed(2)}`;
+      document.getElementById('ticket-cambio').innerText = `$${venta.cambio.toFixed(2)}`;
+
+      document.getElementById('modal-ticket').classList.remove('hidden');
+    }
+
+    function cerrarTicket() {
+      document.getElementById('modal-ticket').classList.add('hidden');
+    }
+
+    // ==========================================
+    // SECCIÓN INVENTARIO: ALTAS, BAJAS Y CAMBIOS (ABC)
+    // ==========================================
+    function renderizarTablaInventario() {
+      const busqueda = (document.getElementById('inventario-buscar').value || '').toLowerCase();
+      const categoria = document.getElementById('filtro-categoria').value;
+      const tbody = document.getElementById('inventario-body');
+      tbody.innerHTML = '';
+
+      const filtrados = inventario.filter(p => {
+        const coincideTxt = p.nombre.toLowerCase().includes(busqueda) || p.codigo.toLowerCase().includes(busqueda);
+        const coincideCat = !categoria || p.categoria === categoria;
+        return coincideTxt && coincideCat;
+      });
+
+      filtrados.forEach(p => {
+        const esBajo = p.stock <= p.stockMin;
+        const sinStock = p.stock === 0;
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-gray-50 border-b";
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-medium">${p.codigo}</td>
+          <td class="p-3 font-semibold text-gray-800">${p.nombre}</td>
+          <td class="p-3"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">${p.categoria}</span></td>
+          <td class="p-3 text-right font-bold text-dif-wine">$${p.precio.toFixed(2)}</td>
+          <td class="p-3 text-center">
+            <span class="font-bold ${esBajo ? 'text-red-600' : 'text-gray-800'}">${p.stock}</span>
+          </td>
+          <td class="p-3 text-center">
+            ${sinStock ? '<span class="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full font-bold">Agotado</span>' : 
+              esBajo ? '<span class="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold">Stock Bajo</span>' : 
+              '<span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-bold">Disponible</span>'}
+          </td>
+          <td class="p-3 text-center whitespace-nowrap">
+            <button onclick="editarProducto(${p.id})" title="Editar / Modificar (Cambio)" class="text-blue-600 hover:text-blue-800 px-2 py-1">
+              <i class="fa-solid fa-pen-to-square"></i>
+            </button>
+            <button onclick="ajustarStockRapido(${p.id})" title="Ajuste Rápido de Stock" class="text-amber-600 hover:text-amber-800 px-2 py-1">
+              <i class="fa-solid fa-boxes-packing"></i>
+            </button>
+            <button onclick="darDeBajaProducto(${p.id})" title="Dar de Baja (Eliminar)" class="text-red-600 hover:text-red-800 px-2 py-1">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function abrirModalProducto(producto = null) {
+      const modal = document.getElementById('modal-producto');
+      const form = document.getElementById('form-producto');
+      form.reset();
+
+      if (producto) {
+        document.getElementById('modal-producto-titulo').innerText = 'Modificar Producto (Cambios)';
+        document.getElementById('prod-id').value = producto.id;
+        document.getElementById('prod-codigo').value = producto.codigo;
+        document.getElementById('prod-nombre').value = producto.nombre;
+        document.getElementById('prod-categoria').value = producto.categoria;
+        document.getElementById('prod-precio').value = producto.precio;
+        document.getElementById('prod-stock').value = producto.stock;
+        document.getElementById('prod-stock-min').value = producto.stockMin;
+      } else {
+        document.getElementById('modal-producto-titulo').innerText = 'Alta de Nuevo Producto';
+        document.getElementById('prod-id').value = '';
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function cerrarModalProducto() {
+      document.getElementById('modal-producto').classList.add('hidden');
+    }
+
+    // ALTA Y CAMBIO
+    function guardarProducto(e) {
+      e.preventDefault();
+      const id = document.getElementById('prod-id').value;
+      const codigo = document.getElementById('prod-codigo').value.trim();
+      const nombre = document.getElementById('prod-nombre').value.trim();
+      const categoria = document.getElementById('prod-categoria').value;
+      const precio = parseFloat(document.getElementById('prod-precio').value);
+      const stock = parseInt(document.getElementById('prod-stock').value);
+      const stockMin = parseInt(document.getElementById('prod-stock-min').value);
+
+      if (id) {
+        // CAMBIO (Editar)
+        const idx = inventario.findIndex(p => p.id === parseInt(id));
+        if (idx !== -1) {
+          inventario[idx] = { ...inventario[idx], codigo, nombre, categoria, precio, stock, stockMin };
+        }
+      } else {
+        // ALTA (Nuevo)
+        const nuevo = {
+          id: Date.now(),
+          codigo,
+          nombre,
+          categoria,
+          precio,
+          stock,
+          stockMin
+        };
+        inventario.push(nuevo);
+      }
+
+      persistirInventario();
+      renderizarTablaInventario();
+      cerrarModalProducto();
+    }
+
+    function editarProducto(id) {
+      const prod = inventario.find(p => p.id === id);
+      if (prod) abrirModalProducto(prod);
+    }
+
+    // BAJA DE PRODUCTO
+    function darDeBajaProducto(id) {
+      const prod = inventario.find(p => p.id === id);
+      if (!prod) return;
+
+      if (confirm(`¿Confirma dar de BAJA definitiva al producto "${prod.nombre}" del catálogo DIF?`)) {
+        inventario = inventario.filter(p => p.id !== id);
+        persistirInventario();
+        renderizarTablaInventario();
+      }
+    }
+
+    // AJUSTE DIRECTO DE STOCK
+    function ajustarStockRapido(id) {
+      const prod = inventario.find(p => p.id === id);
+      if (!prod) return;
+
+      const nuevaExistencia = prompt(`Ajustar stock para: ${prod.nombre}\nExistencia actual: ${prod.stock}`, prod.stock);
+      if (nuevaExistencia !== null && !isNaN(nuevaExistencia) && nuevaExistencia !== '') {
+        prod.stock = Math.max(0, parseInt(nuevaExistencia));
+        persistirInventario();
+        renderizarTablaInventario();
+      }
+    }
+
+    // EXPORTACIÓN BÁSICA CSV
+    function exportarInventarioCSV() {
+      let csv = 'Codigo,Nombre,Categoria,Precio,Stock,StockMinimo\n';
+      inventario.forEach(p => {
+        csv += `"${p.codigo}","${p.nombre}","${p.categoria}",${p.precio},${p.stock},${p.stockMin}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `Inventario_DIF_Tulancingo_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+    }
+
+    // ==========================================
+    // SECCIÓN REPORTES
+    // ==========================================
+    function renderizarReportes() {
+      const totalIngresos = ventas.reduce((acc, v) => acc + v.total, 0);
+      const totalCriticos = inventario.filter(p => p.stock <= p.stockMin).length;
+
+      document.getElementById('rep-total-ingresos').innerText = `$${totalIngresos.toFixed(2)}`;
+      document.getElementById('rep-total-tickets').innerText = ventas.length;
+      document.getElementById('rep-total-productos').innerText = inventario.length;
+      document.getElementById('rep-stock-critico').innerText = totalCriticos;
+
+      const tbody = document.getElementById('reporte-ventas-body');
+      tbody.innerHTML = '';
+
+      if (ventas.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-400">No se han registrado ventas aún.</td></tr>`;
+        return;
+      }
+
+      ventas.forEach(v => {
+        const resumenArticulos = v.items.map(it => `${it.cantidad}x ${it.nombre}`).join(', ');
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-gray-50";
+        tr.innerHTML = `
+          <td class="p-3 font-mono font-bold text-dif-wine">${v.folio}</td>
+          <td class="p-3 text-xs text-gray-500">${v.fecha}</td>
+          <td class="p-3 text-xs text-gray-700 max-w-xs truncate" title="${resumenArticulos}">${resumenArticulos}</td>
+          <td class="p-3 text-right font-bold text-gray-800">$${v.total.toFixed(2)}</td>
+          <td class="p-3 text-center">
+            <button onclick='mostrarTicket(${JSON.stringify(v)})' class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs">
+              <i class="fa-solid fa-eye"></i> Ver Ticket
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Iniciar con la vista de Punto de Venta activa
+    window.onload = () => {
+      cambiarTab('pos');
+    };
+  </script>
+</body>
+</html>
